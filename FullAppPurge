@@ -1,0 +1,82 @@
+#!/bin/bash
+# Uninstall and Cleanup residual files an application on a Mac
+# Author: Lucas Kowe
+
+# Ask for the application name to be uninstalled
+
+application_name=$4
+
+# Construct the full path to the application
+appPath="/Applications/$application_name"
+
+# Double-check if the application is installed
+if [ -d "$appPath" ]; then
+    # Remove the application
+    rm -rf "$appPath" && echo "Uninstalled $application_name" || echo "Failed to uninstall $application_name"
+else
+    echo "$application_name is not installed"
+fi
+
+# Search for potential uninstall scripts related to the application
+echo "Searching for uninstall scripts for $application_name..."
+uninstallScripts=$(mdfind "kMDItemFSName=='*uninstall*${application_name}*' && kMDItemContentType=='public.unix-executable'")
+
+# Check if any scripts were found
+if [ -n "$uninstallScripts" ]; then
+    echo "Found uninstall scripts:"
+    echo "$uninstallScripts"
+    # Execute each found script
+    while IFS= read -r scriptPath; do
+        if [ -x "$scriptPath" ]; then
+            echo "Executing $scriptPath..."
+            "$scriptPath" || echo "Failed to execute $scriptPath"
+        else
+            echo "Skipped $scriptPath"
+        fi
+    done <<< "$uninstallScripts"
+else
+    echo "No uninstall scripts found for $application_name."
+fi
+
+# Function to remove files and directories
+remove_path() {
+    local path=$1
+    if [ -e "$path" ]; then
+        rm -rf "$path" && echo "Removed $path" || echo "Failed to remove $path"
+    fi
+}
+
+# Remove application-related items from various directories
+directories=(
+    "/opt"
+    "/Library/Application Support"
+    "~/Library/Preferences"
+    "~/Library/Caches"
+    "~/Library/Containers"
+    "~/Library/Logs"
+    "~/Library/Cookies"
+    "~/Library/Address Book Plug-Ins"
+    "~/Library/Saved Application State"
+    "~/Library/LaunchAgents"
+    "/Library/LaunchDaemons"
+    "~/Library/QuickLook"
+    "~/Library/Internet Plug-Ins"
+    "~/Library/Mail/Bundles"
+)
+
+for dir in "${directories[@]}"; do
+    echo "Searching in directory: $dir"
+    paths=$(mdfind -onlyin "$dir" "kMDItemFSName=='$application_name'")
+    if [ -n "$paths" ]; then
+        echo "Found paths:"
+        echo "$paths"
+    else
+        echo "No paths found in $dir"
+    fi
+    while IFS= read -r path; do
+        remove_path "$path"
+    done <<< "$paths"
+done
+
+# Output script result
+echo "Cleanup completed"
